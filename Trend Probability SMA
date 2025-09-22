@@ -1,0 +1,100 @@
+#include <Trade\Trade.mqh>
+#property indicator_chart_window
+#property indicator_buffers 1
+#property indicator_plots   1
+#property indicator_label1  "TrendProbabilitySMA"
+#property indicator_type1   DRAW_LINE
+#property indicator_color1  clrDeepSkyBlue
+#property indicator_style1  STYLE_SOLID
+#property indicator_width1  2
+
+input int MA_Period = 10; // Moving Average period (in ticks)
+
+double bufferSMA[];        // Indicator buffer (line of the moving average)
+double probHistory[];      // History of calculated probabilities
+
+class TrendFollow
+  {
+private:
+   static int bullish;
+   static int bearish;
+
+public:
+   double TrendFollowing()
+     {
+      double percentage = 0.0;
+      double total = 0.0;
+
+      double close_now = iClose("DXY", PERIOD_M1, 0);
+      double close_past = iClose("DXY", PERIOD_M1, 10);
+
+      if (close_now > close_past)
+         bullish++;
+      else if (close_now < close_past)
+         bearish++;
+
+      total = bullish + bearish;
+
+      if (total > 0)
+        {
+         if (close_now > close_past)
+            percentage = (double)bullish / total;
+         else if (close_now < close_past)
+            percentage = (double)bearish / total;
+        }
+
+      // Log to the console
+      if (close_now > close_past)
+         Print("Trend: Bullish | Accumulated Probability: ", DoubleToString(percentage * 100, 2), "%");
+      else if (close_now < close_past)
+         Print("Trend: Bearish | Accumulated Probability: ", DoubleToString(percentage * 100, 2), "%");
+      else
+         Print("No price change.");
+
+      return percentage * 100.0; // Return value in percentage
+     }
+  };
+
+// Initialization of static variables
+int TrendFollow::bullish = 0;
+int TrendFollow::bearish = 0;
+
+//+------------------------------------------------------------------+
+//| Indicator initialization function                                |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+   SetIndexBuffer(0, bufferSMA, INDICATOR_DATA);
+   ArraySetAsSeries(bufferSMA, true);
+   ArraySetAsSeries(probHistory, true);
+
+   Print("Indicator initialized.");
+   return(INIT_SUCCEEDED);
+  }
+
+//+------------------------------------------------------------------+
+//| Function called on every new tick                               |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+   static TrendFollow strategy;
+   double prob = strategy.TrendFollowing(); // in %
+
+   // Add the new probability to the history
+   ArrayResize(probHistory, ArraySize(probHistory) + 1);
+   for (int i = ArraySize(probHistory) - 1; i > 0; i--)
+      probHistory[i] = probHistory[i - 1];
+   probHistory[0] = prob;
+
+   // Calculate the moving average of the probability
+   double sum = 0;
+   int count = MathMin(MA_Period, ArraySize(probHistory));
+
+   for (int i = 0; i < count; i++)
+      sum += probHistory[i];
+
+   double sma = (count > 0) ? sum / count : 0;
+
+   // Save to the indicator buffer to draw the line
+   bufferSMA[0] = sma;
+  }
